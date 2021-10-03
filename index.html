@@ -229,7 +229,8 @@ class GameLogic {
         this.canvasY = 720;
 
         this.tick = 0;
-        this.gameOverTick = 0;
+        this.deathTick = 0;
+        this.score = 0;
 
         // one time states to print hints, 0 - not happened, 1 - happened, 2 - hint displayed
         this.shrinkDeathHappened = 0;
@@ -240,8 +241,9 @@ class GameLogic {
 
     reset() {
         this.maxObstacles = this.maxObstaclesDefault;
+        this.score += Math.round(this.tick * this.storyState / 10.0);
         this.tick = 0;
-        this.gameOverTick = 0;
+        this.deathTick = 0;
         this.player.reset();
 
         this.obstacles = [];
@@ -251,7 +253,7 @@ class GameLogic {
         if ((this.gameState == 0 || this.gameState == 2)) {
 
             if (this.input.mouseClicked){
-                if (this.gameState == 0 || (this.gameState == 2 && this.tick - this.gameOverTick > 100) ) {
+                if (this.gameState == 0 || (this.gameState == 2 && this.deathTick > 100) ) {
                     this.reset();
                     if (this.shrinkDeathHappened == 1) this.shrinkDeathHappened = 2;
                     if (this.collisionDeathHappened == 1) this.collisionDeathHappened = 2;
@@ -368,7 +370,7 @@ class GameLogic {
         }
 
         if (this.gameState == 2) {
-            this.tick += 1;
+            this.deathTick += 1;
             
         }
 
@@ -383,7 +385,6 @@ class GameLogic {
 
     processDeath(reason) {
         this.gameState = 2;
-        this.gameOverTick = this.tick;
         // reason 0 - shrinked to death
         if (reason == 0 && this.shrinkDeathHappened == 0 && this.storyState < 10) {
             this.shrinkDeathHappened = 1;
@@ -413,6 +414,9 @@ class GameLogic {
             ctx.font = '300px "Fira Sans", sans-serif';
             ctx.fillText('g  ne.', 100, 400);
             ctx.font = '30px "Fira Sans", sans-serif';
+
+            ctx.fillText('score: ' + this.score, 340, 620);
+
             ctx.fillText('made with ❤️ by', 900, 100);
             ctx.fillText('wafflecomposite', 900, 140);
 
@@ -420,9 +424,9 @@ class GameLogic {
             ctx.fillText('Theme: Unstable', 900, 260);
             ctx.fillText('Compo (solo, 48 hours)', 900, 300);
             
-            ctx.font = '22px "Fira Sans", sans-serif';
-            ctx.fillText('From start to finish, I had no idea', 900, 600);
-            ctx.fillText('what the game would be about.', 900, 630);
+            //ctx.font = '22px "Fira Sans", sans-serif';
+            //ctx.fillText('From start to finish, I had no idea', 900, 600);
+            //ctx.fillText('what the game would be about.', 900, 630);
             return
         }
 
@@ -437,7 +441,19 @@ class GameLogic {
         ctx.fillStyle = "rgba(" + Math.random() * bgCol + ", " + Math.random() * bgCol + ", " + Math.random() * bgCol + ", " + 1/bgTransp + ")";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        
+        if (this.gameState == 1 || this.gameState == 2) {
+            if (this.storyState <= 10) {
+                ctx.fillStyle = "#FFFFFF";
+                ctx.font = '20px "Fira Sans", sans-serif';
+                ctx.fillText("score: " + (this.tick + Math.round(Math.random() * this.tick * this.storyState / 100)), 20, 40);
+            }
+            else if (this.storyState <= 20) {
+                ctx.fillStyle = "rgba(" + Math.random() * 100  + ", " + Math.random() * 100  + ", " + Math.random() * 100  + ", " + Math.random() + ")";
+                ctx.font = '20px "Fira Sans", sans-serif';
+                ctx.fillText("score: " + Math.round((this.tick + this.score) * Math.random()), 20, 40);
+            }
+        }
+            
         if (this.storyState < 28) {
 
             if (this.gameState == 1) {
@@ -674,7 +690,7 @@ class GameLogic {
             else if (this.storyState == 30){
                 ctx.fillStyle = "#EE0000";
                 ctx.font = '400px "Fira Sans", sans-serif';
-                ctx.fillText("WHAT", 100, 400);
+                ctx.fillText("WHAT", 0, 400);
             }
         }
         
@@ -683,7 +699,7 @@ class GameLogic {
 
         if (this.gameState == 2) {
             if (this.storyState < 19) {
-                var timePassed = this.tick - this.gameOverTick;
+                var timePassed = this.deathTick;
                 if (timePassed < 33) {
                     ctx.fillText('3...', 760, 540);
                 }
@@ -698,7 +714,7 @@ class GameLogic {
                 }
             }
             else if (this.storyState == 19) {
-                var timePassed = this.tick - this.gameOverTick;
+                var timePassed = this.deathTick;
                 if (timePassed < 33) {
                     ctx.fillText('-1...', 760, 540);
                 }
