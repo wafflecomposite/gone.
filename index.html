@@ -423,9 +423,13 @@ class GameLogic {
             ctx.fillText('Ludum Dare 49', 900, 220);
             ctx.fillText('Theme: Unstable', 900, 260);
             ctx.fillText('Compo (solo, 48 hours)', 900, 300);
-            
-            //ctx.font = '22px "Fira Sans", sans-serif';
-            //ctx.fillText('From start to finish, I had no idea', 900, 600);
+
+            ctx.font = '26px "Fira Sans", sans-serif';
+
+
+            ctx.fillText('Refresh the page to try again.', 900, 540);
+            ctx.fillText('If you had the sound turned on -', 900, 610);
+            ctx.fillText('yeah, sorry about your ears.', 900, 640);
             //ctx.fillText('what the game would be about.', 900, 630);
             return
         }
@@ -506,13 +510,15 @@ class GameLogic {
 
         if (this.gameState == 0 && this.storyState == 0) {
             
+
             this.drawLeftText([
             'Spam left mouse button.',
             'Dodge the obstacles.',
             'Survive.'
             ]);
     
-            ctx.fillText('Click to start.', 760, 540);
+            ctx.fillText('Warning: flashing lights, loud noisy sounds.', 260, 640);
+            ctx.fillText('Click to start.', 760, 500);
         }
         else if (this.shrinkDeathHappened == 1){
             this.drawLeftText([
@@ -627,7 +633,7 @@ class GameLogic {
             }
             else if (this.storyState == 16){
                 this.drawLeftText([
-                'It\'s only getting worse.I said you can go.',
+                'I said you can go.',
                 'Stop screwing up my game.',
                 ]);
             }
@@ -650,42 +656,42 @@ class GameLogic {
             else if (this.storyState == 20){
                 ctx.fillStyle = "#EE9999";
                 ctx.font = '50px "Fira Sans", sans-serif';
-                ctx.fillText("please", 160, 140);
+                ctx.fillText("please", 460, 340);
             }
             else if (this.storyState == 21){
                 ctx.fillStyle = "#EE8888";
                 ctx.font = '60px "Fira Sans", sans-serif';
-                ctx.fillText("would", 160, 140);
+                ctx.fillText("would", 460, 340);
             }
             else if (this.storyState == 22){
                 ctx.fillStyle = "#EE7777";
                 ctx.font = '70px "Fira Sans", sans-serif';
-                ctx.fillText("you", 160, 140);
+                ctx.fillText("you", 460, 340);
             }
             else if (this.storyState == 23){
                 ctx.fillStyle = "#EE6666";
                 ctx.font = '80px "Fira Sans", sans-serif';
-                ctx.fillText("stop", 160, 140);
+                ctx.fillText("stop", 460, 340);
             }
             else if (this.storyState == 24){
                 ctx.fillStyle = "#EE5555";
                 ctx.font = '90px "Fira Sans", sans-serif';
-                ctx.fillText("messing", 160, 140);
+                ctx.fillText("messing", 460, 340);
             }
             else if (this.storyState == 25){
                 ctx.fillStyle = "#EE4444";
                 ctx.font = '100px "Fira Sans", sans-serif';
-                ctx.fillText("with", 160, 140);
+                ctx.fillText("with", 460, 340);
             }
             else if (this.storyState == 26){
                 ctx.fillStyle = "#EE2222";
                 ctx.font = '110px "Fira Sans", sans-serif';
-                ctx.fillText("my", 160, 140);
+                ctx.fillText("my", 460, 340);
             }
             else if (this.storyState == 27){
                 ctx.fillStyle = "#EE2222";
                 ctx.font = '120px "Fira Sans", sans-serif';
-                ctx.fillText("game", 160, 140);
+                ctx.fillText("game", 460, 340);
             }
             else if (this.storyState == 30){
                 ctx.fillStyle = "#EE0000";
