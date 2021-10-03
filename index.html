@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <!-- <meta name="viewport" content="width=device-width, initial-scale=1"> -->
+    <title>gone.</title>
+    <meta name="author" content="wafflecomposite">
+    <style type="text/css">
+        * { 
+            padding: 0; 
+            margin: 0;
+        }
+        body {
+            background: #222;
+        }
+        canvas { 
+            background: #111; 
+            display: block; 
+            margin: 0 auto; 
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1280" height="720"></canvas>
+    <script>
+
+var canvas = document.getElementById("gameCanvas");
+var ctx = canvas.getContext("2d");
+
+const deg2rad = Math.PI/180;
+
+
+// base Cuboid class, for player and enemies
+class Cuboid {
+    constructor() {
+
+        this.posX = 0;
+        this.posY = 0;
+        this.rotation = 0;
+        this.width = 0;
+        this.widthDefault = 14;
+
+        this.maxSpeed = 16;
+        this.rotateSpeed = 6;
+        this.shrinkSpeed = 0.08;
+        this.growSpeed = 2;
+
+        this.dots = [];
+    }
+
+    setPos(x, y) {
+        this.posX = x;
+        this.posY = y;
+    }
+
+    addRotation(degrees=this.rotateSpeed) {
+        this.rotation += degrees;
+        if (this.rotation > 360) this.rotation -=360;
+        if (this.rotation < 360) this.rotation +=360;
+    }
+
+    recalculateDots()
+    {
+        this.dots = [];
+        var dotList = [
+            [-this.width, -this.width],
+            [-this.width, +this.width],
+            [+this.width, +this.width],
+            [+this.width, -this.width]
+        ];
+        var theta = this.rotation * deg2rad;
+        var cs = Math.cos(theta);
+        var sn = Math.sin(theta);
+        dotList.forEach(el => 
+            {
+                this.dots.push(el[0] * cs - el[1] * sn);
+                this.dots.push(el[0] * sn + el[1] * cs);
+            }
+        );
+    }
+
+    addNoise(percent) { // noise percentage, 0-1
+        var noiseArray = [];
+        for(var i=0; i < 8; i++){
+            var noise = Math.max(1 + (Math.random() - 0.5) * 2.0 * percent, 0);
+            noiseArray.push(noise)
+        }
+
+        this.dots.forEach(function(dot, index) {
+
+            this.dots[index] = dot * noiseArray[index];
+
+        }, this);
+    }
+
+    reset() {
+        this.width = this.widthDefault;
+    }
+}
+
+class Player extends Cuboid {
+    processDecay() {
+        this.width -= this.shrinkSpeed;
+    }
+
+    processGrow() {
+        this.width += this.growSpeed;
+    }
+}
+
+class Obstacle extends Cuboid {
+    constructor() {
+        super();
+        this.killer = false;
+    }
+}
+
+class InputHandler {
+    constructor () {
+        this.mouseX = 0;
+        this.mouseY = 0;
+        this.mouseClicked = false;
+
+        canvas.addEventListener('mousemove', this.onMouseMove.bind(this));
+        canvas.addEventListener('click', this.onMouseClick.bind(this));
+    }
+
+    onMouseMove(evt) {
+        this.mouseX = evt.pageX - canvas.offsetLeft;
+        this.mouseY = evt.pageY - canvas.offsetTop;
+    }
+
+    onMouseClick(evt) {
+        this.mouseClicked = true;
+    }
+}
+
+class SoundHandler {
+    constructor() {
+        this.enabled = true;
+
+        this.deathContext = new AudioContext();
+
+        this.startContext = new AudioContext();
+
+        this.playerWidthContext = new AudioContext();
+        this.playerWidthLastPlayed = 0;
+        this.playerWidthTriggerEvery = 10;
+    }
+
+    playStart() {
+        if (!this.enabled) return;
+        var now = this.startContext.currentTime;
+        var len = 0.5;
+
+        var o = this.startContext.createOscillator();
+        o.type="sine" // oscillator type
+        o.frequency.setValueAtTime(20.60, 0); // oscillator frequency at start
+        o.frequency.exponentialRampToValueAtTime(164.82,now+len) // oscillator frequency at end
+
+        var g = this.startContext.createGain() // gain (volune)
+
+        g.gain.linearRampToValueAtTime(0.00001,now+len) // ramp the gain down, aaaaand it's not working in mozilla. Great.
+
+        o.connect(g)
+        g.connect(this.startContext.destination)
+        o.start(0)
+        o.stop(now + len);
+    }
+
+    playDeath() {
+        if (!this.enabled) return;
+        var now = this.deathContext.currentTime;
+        var len = 1.0;
+
+        var o = this.deathContext.createOscillator();
+        o.type="sine" // oscillator type
+        o.frequency.setValueAtTime(82.41, 0); // oscillator frequency at start
+        o.frequency.exponentialRampToValueAtTime(10.30,now+len) // oscillator frequency at end
+
+        var g = this.deathContext.createGain() // gain (volune)
+
+        g.gain.linearRampToValueAtTime(0.00001,now+len) // ramp the gain down, aaaaand it's not working in mozilla. Great.
+
+        o.connect(g)
+        g.connect(this.deathContext.destination)
+        o.start(0)
+        o.stop(now + len);
+    }
+
+    playWidth(width) {
+        if (!this.enabled) return;
+        if (this.playerWidthLastPlayed == this.playerWidthTriggerEvery) this.playerWidthLastPlayed = 0;
+        if (this.playerWidthLastPlayed == 0) {
+            var now = this.playerWidthContext.currentTime;
+            var len = 0.1;
+
+            var o = this.playerWidthContext.createOscillator();
+            o.type="sine" // oscillator type
+            o.frequency.setValueAtTime(82.41 * (width / 20.0), 0); // oscillator frequency at start
+
+            var g = this.playerWidthContext.createGain() // gain (volune)
+            g.gain.value = 0.08 // actual volume (0-1)
+
+            g.gain.linearRampToValueAtTime(0.00001,now+len) // ramp the gain down
+
+            o.connect(g)
+            g.connect(this.playerWidthContext.destination)
+            o.start(0)
+            o.stop(now + len);
+        }
+        this.playerWidthLastPlayed += 1;
+    }
+}
+
+class GameLogic {
+    constructor() {
+        this.player = new Player();
+        this.maxObstacles = 0;
+        this.maxObstaclesDefault = 0;
+        this.obstacles = [];
+        this.input = new InputHandler();
+        // game state, 0 - waiting for start, 1 - playing, 2 - stage over, 3 - game finished
+        this.gameState = 0;
+        // story state
+        this.storyState = 0;
+
+        this.canvasX = 1280;
+        this.canvasY = 720;
+
+        this.tick = 0;
+        this.gameOverTick = 0;
+
+        // one time states to print hints, 0 - not happened, 1 - happened, 2 - hint displayed
+        this.shrinkDeathHappened = 0;
+        this.collisionDeathHappened = 0;
+
+        this.sound = new SoundHandler();
+    }
+
+    reset() {
+        this.maxObstacles = this.maxObstaclesDefault;
+        this.tick = 0;
+        this.gameOverTick = 0;
+        this.player.reset();
+
+        this.obstacles = [];
+    }
+    
+    calculate() {
+        if ((this.gameState == 0 || this.gameState == 2)) {
+
+            if (this.input.mouseClicked){
+                if (this.gameState == 0 || (this.gameState == 2 && this.tick - this.gameOverTick > 100) ) {
+                    this.reset();
+                    if (this.shrinkDeathHappened == 1) this.shrinkDeathHappened = 2;
+                    if (this.collisionDeathHappened == 1) this.collisionDeathHappened = 2;
+                    this.gameState = 1;
+                    this.sound.playStart()
+                }
+                else {
+                    this.input.mouseClicked = false;
+                }
+            }
+
+            if (this.storyState >= 20) {
+                this.reset();
+                this.gameState = 1;
+                this.sound.playStart()
+            }
+        }
+    
+        if (this.gameState == 0 || this.gameState == 1) {
+            this.player.setPos(this.input.mouseX, this.input.mouseY);
+            this.player.addRotation();
+            this.player.recalculateDots();
+            if (this.storyState < 27) {
+                this.player.addNoise(this.storyState / 50);
+            }
+            
+            else {
+                this.player.addNoise(20 / this.storyState);
+            }
+        }
+
+        if (this.gameState == 1) {
+            this.tick += 1;
+            this.sound.playWidth(this.player.width);
+
+            this.maxObstacles = Math.round(this.tick / 60 * (1 + this.storyState * 0.4));
+
+            var pcollW = this.player.width / 4 * 3;
+            var pcollX = this.player.posX;
+            var pcollY = this.player.posY;
+
+            this.obstacles.forEach(function(obstacle, index) {
+
+                var collW = obstacle.width / 4 * 3 + pcollW;
+                var collX = Math.abs(pcollX - obstacle.posX);
+                var collY = Math.abs(pcollY - obstacle.posY);
+
+                if (collX < collW) {
+                    if (collY < collW) {
+                        if (this.storyState < 30) {
+                            obstacle.killer = true;
+                            this.processDeath(1);
+                            return;
+                        }
+                        else {
+                            this.obstacles.splice(index, 1);
+                            this.player.width += 1;
+                            this.sound.playDeath();
+                            if (this.player.width >= this.canvasX) {
+                                this.gameState = 3;
+                            }
+                        }
+                    }
+                }
+
+                obstacle.addRotation();
+
+                if (obstacle.posY > this.canvasY + obstacle.width + 10){
+                    this.obstacles.splice(index, 1);
+                }
+
+                obstacle.posY += obstacle.maxSpeed;
+                obstacle.recalculateDots();
+                if (this.storyState < 27) {
+                    obstacle.addNoise(this.storyState / 50);
+                }
+                else {
+                    obstacle.addNoise(20 / this.storyState);
+                }
+                
+            }, this);
+
+            if (this.obstacles.length < this.maxObstacles) {
+
+                var freeslots = this.maxObstacles - this.obstacles.length;
+                for(var i=0; i < freeslots; i++){
+                    var obstacle = new Obstacle();
+                    this.obstacles.push(obstacle);
+                    obstacle.reset();
+                    obstacle.width = Math.random() * 15 + 5;
+                    obstacle.rotateSpeed = (Math.random() - 0.5) * 10;
+                    obstacle.maxSpeed = Math.random() * (6 + this.storyState / 4.5) + 2;
+                    obstacle.posX = Math.random() * this.canvasX;
+                    obstacle.posY = 1;
+                }
+                //console.log(this.obstacles.length, this.maxObstacles);
+            }
+
+            if (this.storyState < 30) {
+                if (this.input.mouseClicked) {
+                    this.input.mouseClicked = false;
+                    this.player.processGrow();
+                    this.player.rotateSpeed = (Math.random() - 0.5) * 14;
+                }
+                else {
+                    this.player.processDecay();
+                }
+
+                if (this.player.width < 1) {
+                    this.processDeath(0);
+                    return
+                }
+            }
+        }
+
+        if (this.gameState == 2) {
+            this.tick += 1;
+            
+        }
+
+        if (this.gameState == 3) {
+            this.player.width = 70;
+            this.player.posX = 350;
+            this.player.posY = 320;
+            this.player.addRotation(0.3);
+            this.player.recalculateDots();
+        }
+    }
+
+    processDeath(reason) {
+        this.gameState = 2;
+        this.gameOverTick = this.tick;
+        // reason 0 - shrinked to death
+        if (reason == 0 && this.shrinkDeathHappened == 0 && this.storyState < 10) {
+            this.shrinkDeathHappened = 1;
+        }
+        // reason 1 - collision
+        else if (reason == 1 && !this.collisionDeathHappened && this.storyState < 10) {
+            this.collisionDeathHappened = 1;
+        }
+        // progress story
+        else {
+            this.storyState += 1;
+        }
+
+        this.sound.playDeath();
+    }
+
+    draw() {
+
+        if (this.gameState == 3) {
+
+            ctx.fillStyle = "#FFFFFF";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            this.drawCuboid(this.player, "#00EE00");
+
+            ctx.fillStyle = "#000000";
+            ctx.font = '300px "Fira Sans", sans-serif';
+            ctx.fillText('g  ne.', 100, 400);
+            ctx.font = '30px "Fira Sans", sans-serif';
+            ctx.fillText('made with ❤️ by', 900, 100);
+            ctx.fillText('wafflecomposite', 900, 140);
+
+            ctx.fillText('Ludum Dare 49', 900, 220);
+            ctx.fillText('Theme: Unstable', 900, 260);
+            ctx.fillText('Compo (solo, 48 hours)', 900, 300);
+            
+            ctx.font = '22px "Fira Sans", sans-serif';
+            ctx.fillText('From start to finish, I had no idea', 900, 600);
+            ctx.fillText('what the game would be about.', 900, 630);
+            return
+        }
+
+        //ctx.clearRect(0, 0, canvas.width, canvas.height);
+        var bgTransp = this.storyState - 4;
+        if (bgTransp <= 0) bgTransp = 1;
+
+        var bgCol = this.storyState - 4;
+        if (bgTransp < 0) bgCol = 1;
+
+
+        ctx.fillStyle = "rgba(" + Math.random() * bgCol + ", " + Math.random() * bgCol + ", " + Math.random() * bgCol + ", " + 1/bgTransp + ")";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        
+        if (this.storyState < 28) {
+
+            if (this.gameState == 1) {
+                var obstacleColor = "#EEEEEE";
+            }
+            else {
+                var obstacleColor = "#555555";
+            }
+
+            this.obstacles.forEach(obstacle => {
+                if (obstacle.killer) {
+                    this.drawCuboid(obstacle, "#FF0000")
+                }
+                else {
+                    this.drawCuboid(obstacle, obstacleColor);
+                }
+            });
+
+            this.drawCuboid(this.player, "#00EE00");
+        }
+        else if (this.storyState == 28) {
+
+
+            this.obstacles.forEach(obstacle => {
+                this.drawCuboid(obstacle, "#99EE99");
+            });
+
+            this.drawCuboid(this.player, "#33AA33");
+        }
+        else if (this.storyState == 29) {
+
+            this.obstacles.forEach(obstacle => {
+                this.drawCuboid(obstacle, "#22EE22");
+            });
+
+            this.drawCuboid(this.player, "#99CC99");
+        }
+        else if (this.storyState >= 30) {
+
+
+            this.obstacles.forEach(obstacle => {
+                this.drawCuboid(obstacle, "#00EE00")
+            });
+
+            this.drawCuboid(this.player, "#EEEEEE");
+        }
+
+        ctx.fillStyle = "#9999EE";
+        ctx.font = '40px "Fira Sans", sans-serif';
+
+        if (this.gameState == 0 && this.storyState == 0) {
+            
+            this.drawLeftText([
+            'Spam left mouse button.',
+            'Dodge the obstacles.',
+            'Survive.'
+            ]);
+    
+            ctx.fillText('Click to start.', 760, 540);
+        }
+        else if (this.shrinkDeathHappened == 1){
+            this.drawLeftText([
+            'You\'re gone.',
+            'You are shrinking over time until you vanish.',
+            'Don\'t forget to spam the left mouse button to counter it.'
+            ]);
+        }
+        else if (this.collisionDeathHappened == 1){
+            this.drawLeftText([
+            'You\'re gone.',
+            'Dodge the obstacles.',
+            'Don\'t spam the left mouse button too often.',
+            'Dodging is easier when you\'re small.'
+            ]);
+        }
+        else if (this.gameState == 2) {
+            if (this.storyState == 1){
+                this.drawLeftText([
+                'You have lost.',
+                'Please refrain from losing again.',
+                ]);
+            }
+            else if (this.storyState == 2){
+                this.drawLeftText([
+                'I meant it.',
+                'Something breaks a bit when you lose.',
+                ]);
+            }
+            else if (this.storyState == 3){
+                this.drawLeftText([
+                'Still trying to debug it.',
+                'And in the meantime, try not to lose anymore, okay?',
+                ]);
+            }
+            else if (this.storyState == 4){
+                this.drawLeftText([
+                'could you please not',
+                ]);
+            }
+            else if (this.storyState == 5){
+                this.drawLeftText([
+                'Come on, show me your S K I L L S.',
+                'Keep playing, keep staying alive.',
+                'I need a bit more time.',
+                ]);
+            }
+            else if (this.storyState == 6){
+                this.drawLeftText([
+                'I think I found it.',
+                'Go on, start again.',
+                'Hang in there a bit longer.',
+                ]);
+            }
+            else if (this.storyState == 7){
+                this.drawLeftText([
+                'What do you mean you\'re not an early access tester?',
+                'Everyone is a early access tester today!',
+                ]);
+            }
+            else if (this.storyState == 8){
+                this.drawLeftText([
+                'I think I fixed it.',
+                'Did it work?',
+                '',
+                '',
+                'Oh, man',
+                ]);
+            }
+            else if (this.storyState == 9){
+                this.drawLeftText([
+                'Your score is not getting much better.',
+                'What\'s the matter, are you tired already?'
+                ]);
+            }
+            else if (this.storyState == 10){
+                this.drawLeftText([
+                'Wait, I had no idea it was that bad.',
+                'Don\'t worry about it, though, I think I know what this is about.'
+                ]);
+            }
+            else if (this.storyState == 11){
+                this.drawLeftText([
+                'It doesn\'t help, I get it.',
+                'I\'ll try something else.'
+                ]);
+            }
+            else if (this.storyState == 12){
+                this.drawLeftText([
+                'You know what, ',
+                'now we\'re both breaking the game at this point.',
+                'That\'s enough, you can go now.'
+                ]);
+            }
+            else if (this.storyState == 13){
+                this.drawLeftText([
+                'This is a mess.',
+                'Where did I put the previous version...',
+                ]);
+            }
+            else if (this.storyState == 14){
+                this.drawLeftText([
+                'What the hell is going on?',
+                ]);
+            }
+            else if (this.storyState == 15){
+                this.drawLeftText([
+                'It\'s only getting worse.',
+                'Uh, wait...',
+                'You still here?!',
+                ]);
+            }
+            else if (this.storyState == 16){
+                this.drawLeftText([
+                'It\'s only getting worse.I said you can go.',
+                'Stop screwing up my game.',
+                ]);
+            }
+            else if (this.storyState == 17){
+                this.drawLeftText([
+                'Quit it.',
+                'I\'ll call you when I get it fixed.',
+                ]);
+            }
+            else if (this.storyState == 18){
+                this.drawLeftText([
+                'Am I not making myself clear?',
+                ]);
+            }
+            else if (this.storyState == 19){
+                this.drawLeftText([
+                'Dude, you broke the restart timer!',
+                ]);
+            }
+            else if (this.storyState == 20){
+                ctx.fillStyle = "#EE9999";
+                ctx.font = '50px "Fira Sans", sans-serif';
+                ctx.fillText("please", 160, 140);
+            }
+            else if (this.storyState == 21){
+                ctx.fillStyle = "#EE8888";
+                ctx.font = '60px "Fira Sans", sans-serif';
+                ctx.fillText("would", 160, 140);
+            }
+            else if (this.storyState == 22){
+                ctx.fillStyle = "#EE7777";
+                ctx.font = '70px "Fira Sans", sans-serif';
+                ctx.fillText("you", 160, 140);
+            }
+            else if (this.storyState == 23){
+                ctx.fillStyle = "#EE6666";
+                ctx.font = '80px "Fira Sans", sans-serif';
+                ctx.fillText("stop", 160, 140);
+            }
+            else if (this.storyState == 24){
+                ctx.fillStyle = "#EE5555";
+                ctx.font = '90px "Fira Sans", sans-serif';
+                ctx.fillText("messing", 160, 140);
+            }
+            else if (this.storyState == 25){
+                ctx.fillStyle = "#EE4444";
+                ctx.font = '100px "Fira Sans", sans-serif';
+                ctx.fillText("with", 160, 140);
+            }
+            else if (this.storyState == 26){
+                ctx.fillStyle = "#EE2222";
+                ctx.font = '110px "Fira Sans", sans-serif';
+                ctx.fillText("my", 160, 140);
+            }
+            else if (this.storyState == 27){
+                ctx.fillStyle = "#EE2222";
+                ctx.font = '120px "Fira Sans", sans-serif';
+                ctx.fillText("game", 160, 140);
+            }
+            else if (this.storyState == 30){
+                ctx.fillStyle = "#EE0000";
+                ctx.font = '400px "Fira Sans", sans-serif';
+                ctx.fillText("WHAT", 100, 400);
+            }
+        }
+        
+        ctx.fillStyle = "#9999EE";
+        ctx.font = '40px "Fira Sans", sans-serif';
+
+        if (this.gameState == 2) {
+            if (this.storyState < 19) {
+                var timePassed = this.tick - this.gameOverTick;
+                if (timePassed < 33) {
+                    ctx.fillText('3...', 760, 540);
+                }
+                else if (timePassed < 66) {
+                    ctx.fillText('2...', 760, 540);
+                }
+                else if (timePassed < 100) {
+                    ctx.fillText('1...', 760, 540);
+                }
+                else {
+                    ctx.fillText('Click to restart.', 760, 540);
+                }
+            }
+            else if (this.storyState == 19) {
+                var timePassed = this.tick - this.gameOverTick;
+                if (timePassed < 33) {
+                    ctx.fillText('-1...', 760, 540);
+                }
+                else if (timePassed < 66) {
+                    ctx.fillText('undefined', 760, 540);
+                }
+                else if (timePassed < 100) {
+                    ctx.fillText('[object Object] ', 760, 540);
+                }
+                else {
+                    ctx.fillText('Click to rClick to rClick to rClick to r', 760, 540);
+                }
+            }
+            else if (this.storyState <= 30) {
+                //ctx.fillStyle = "#9999EE";
+                ctx.fillText(Math.floor(Math.random()*this.storyState) + '...', 760, 540);
+            }
+        }
+    }
+
+    drawLeftText(textArray) {
+        var pLeft = 160;
+        var pTop = 140;
+        var pTopStep = 60;
+
+        var count = 0;
+
+        textArray.forEach(str => {
+            ctx.fillText(str, pLeft, pTop + pTopStep* count);
+            count += 1;
+        });
+    }
+
+    drawCuboid(c, color = "#EEEEEE") {
+        var d = c.dots;
+        var tgtX = c.posX;
+        var tgtY = c.posY;
+    
+        ctx.beginPath();
+        ctx.moveTo(tgtX+d[0], tgtY+d[1]);
+        ctx.lineTo(tgtX+d[2], tgtY+d[3]);
+        ctx.lineTo(tgtX+d[4], tgtY+d[5]);
+        ctx.lineTo(tgtX+d[6], tgtY+d[7]);
+        ctx.lineTo(tgtX+d[0], tgtY+d[1]);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.closePath();
+    
+        ctx.stroke(); 
+    }
+
+    processFrame() {
+        this.calculate();
+        this.draw();
+    }
+
+    start() {
+        setInterval(this.processFrame.bind(this), 10);
+    }
+}
+
+var game = new GameLogic();
+game.start();
+    </script>
+
+</body>
